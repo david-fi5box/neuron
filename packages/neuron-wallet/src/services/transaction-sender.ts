@@ -26,7 +26,6 @@ import {
   CapacityNotEnoughForChange,
   CapacityNotEnoughForChangeByTransfer,
   CellIsNotYetLive,
-  MultisigConfigNeedError,
   NoMatchAddressForSign,
   SignTransactionFailed,
   TransactionIsNotCommittedYet,
@@ -330,7 +329,9 @@ export default class TransactionSender {
     for (const lockHash of lockHashes) {
       const multisigConfig = multisigConfigMap[lockHash]
       if (!multisigConfig) {
-        throw new MultisigConfigNeedError()
+        // complex transaction has other lock
+        logger.warn('met unknown lock, ignore it!', lockHash)
+        continue
       }
       const [privateKey, blake160] = findPrivateKeyAndBlake160(multisigConfig.blake160s, tx.signatures?.[lockHash])
 
