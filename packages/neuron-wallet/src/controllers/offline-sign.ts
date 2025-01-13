@@ -15,6 +15,7 @@ import { getMultisigStatus } from '../utils/multisig'
 import { generateRPC } from '../utils/ckb-rpc'
 import ShowGlobalDialogSubject from '../models/subjects/show-global-dialog'
 import NetworksService from '../services/networks'
+import logger from '../utils/logger'
 
 export default class OfflineSignController {
   public async exportTransactionAsJSON({
@@ -94,6 +95,7 @@ export default class OfflineSignController {
           context
         )
       } else {
+        logger.warn('signTransaction 98')
         tx = await new TransactionSender().sign(
           walletID,
           Transaction.fromObject(transaction),

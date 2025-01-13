@@ -158,6 +158,7 @@ export default class TransactionSender {
     const paths = addressInfos.map(info => info.path)
     const pathAndPrivateKeys = this.getPrivateKeys(wallet, paths, password)
     const findPrivateKey = (args: string) => {
+      logger.warn('findPrivateKey ', args)
       let path: string | undefined
       if (args.length === TransactionSender.MULTI_SIGN_ARGS_LENGTH) {
         path = multiSignBlake160s.find(i => args.slice(0, 42) === i.multiSignBlake160)!.path
@@ -168,10 +169,14 @@ export default class TransactionSender {
         path = addressInfo?.path
       }
 
+      logger.warn('findPrivateKey path ', path)
+
       const pathAndPrivateKey = pathAndPrivateKeys.find(p => p.path === path)
       if (!pathAndPrivateKey) {
+        logger.warn('findPrivateKey failed ', args)
         throw new Error('no private key found')
       }
+      logger.warn('findPrivateKey success ', args)
       return pathAndPrivateKey.privateKey
     }
 
@@ -197,50 +202,54 @@ export default class TransactionSender {
       // A 65-byte empty signature used as placeholder
       witnessesArgs[0].witnessArgs.setEmptyLock()
 
-      const privateKey = findPrivateKey(witnessesArgs[0].lockArgs)
+      try {
+        const privateKey = findPrivateKey(witnessesArgs[0].lockArgs)
 
-      const serializedWitnesses: (WitnessArgs | string)[] = witnessesArgs.map((value: SignInfo, index: number) => {
-        const args = value.witnessArgs
-        if (index === 0) {
-          return args
-        }
-        if (args.lock === undefined && args.inputType === undefined && args.outputType === undefined) {
-          return '0x'
-        }
-        return serializeWitnessArgs(args.toSDK())
-      })
-      let signed: (string | CKBComponents.WitnessArgs | WitnessArgs)[] = []
-
-      if (isMultisig) {
-        const blake160 = addressInfos.find(
-          i => witnessesArgs[0].lockArgs.slice(0, 42) === Multisig.hash([i.blake160])
-        )!.blake160
-        const serializedMultisig: string = Multisig.serialize([blake160])
-        signed = await TransactionSender.signSingleMultiSignScript(
-          privateKey,
-          serializedWitnesses,
-          txHash,
-          serializedMultisig,
-          wallet
-        )
-        const wit = signed[0] as WitnessArgs
-        wit.lock = serializedMultisig + wit.lock!.slice(2)
-        signed[0] = serializeWitnessArgs(wit.toSDK())
-      } else {
-        signed = signWitnesses({
-          privateKey,
-          transactionHash: txHash,
-          witnesses: serializedWitnesses.map(wit => {
-            if (typeof wit === 'string') {
-              return wit
-            }
-            return wit.toSDK()
-          }),
+        const serializedWitnesses: (WitnessArgs | string)[] = witnessesArgs.map((value: SignInfo, index: number) => {
+          const args = value.witnessArgs
+          if (index === 0) {
+            return args
+          }
+          if (args.lock === undefined && args.inputType === undefined && args.outputType === undefined) {
+            return '0x'
+          }
+          return serializeWitnessArgs(args.toSDK())
         })
-      }
+        let signed: (string | CKBComponents.WitnessArgs | WitnessArgs)[] = []
 
-      for (let i = 0; i < witnessesArgs.length; ++i) {
-        witnessesArgs[i].witness = signed[i] as string
+        if (isMultisig) {
+          const blake160 = addressInfos.find(
+            i => witnessesArgs[0].lockArgs.slice(0, 42) === Multisig.hash([i.blake160])
+          )!.blake160
+          const serializedMultisig: string = Multisig.serialize([blake160])
+          signed = await TransactionSender.signSingleMultiSignScript(
+            privateKey,
+            serializedWitnesses,
+            txHash,
+            serializedMultisig,
+            wallet
+          )
+          const wit = signed[0] as WitnessArgs
+          wit.lock = serializedMultisig + wit.lock!.slice(2)
+          signed[0] = serializeWitnessArgs(wit.toSDK())
+        } else {
+          signed = signWitnesses({
+            privateKey,
+            transactionHash: txHash,
+            witnesses: serializedWitnesses.map(wit => {
+              if (typeof wit === 'string') {
+                return wit
+              }
+              return wit.toSDK()
+            }),
+          })
+        }
+
+        for (let i = 0; i < witnessesArgs.length; ++i) {
+          witnessesArgs[i].witness = signed[i] as string
+        }
+      } catch (err) {
+        logger.error('sign error', err)
       }
     }
 
